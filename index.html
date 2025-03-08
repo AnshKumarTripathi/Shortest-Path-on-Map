@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Smart Gujarat Hackathon - Route Optimizer</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+    }
+
+    #header {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #2c3e50;
+    }
+
+    #map {
+      height: 600px;
+      border: 2px solid #3498db;
+      border-radius: 8px;
+    }
+
+    .controls {
+      position: absolute;
+      top: 80px;
+      right: 20px;
+      z-index: 1000;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    }
+
+    button {
+      background: #3498db;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      margin: 5px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background: #2980b9;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="header">
+    <h1>Smart Route Planner Interface (Draft)</h1>
+    <p>Smart Gujarat Hackathon - Problem Statement PS000174</p>
+    <p>Optimal Path Finding for Urban Logistics</p>
+  </div>
+
+  <div class="controls">
+    <button onclick="calculateRoute()">Calculate Optimal Route</button>
+    <button onclick="clearAll()">Clear All Markers</button>
+  </div>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script>
+    let map;
+    let markers = [];
+    let routeLayer = L.featureGroup();
+    const AHMEDABAD_COORD = [23.0225, 72.5714]; // Latitude, Longitude for Ahmedabad
+
+    function initMap() {
+      // Initialize map centered on Ahmedabad
+      map = L.map('map').setView(AHMEDABAD_COORD, 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map);
+      map.addLayer(routeLayer);
+
+      // Add click handler for placing markers
+      map.on('click', function (e) {
+        addMarker(e.latlng);
+      });
+    }
+
+    function normalizeLng(lng) {
+      while (lng > 180) lng -= 360;
+      while (lng < -180) lng += 360;
+      return lng;
+    }
+
+    function validateCoord(coord) {
+      return {
+        lat: Math.max(-90, Math.min(90, coord.lat)),
+        lng: normalizeLng(coord.lng)
+      };
+    }
+
+    function addMarker(latlng) {
+      const validCoord = validateCoord(latlng);
+      const marker = L.marker(validCoord, {
+        draggable: true,
+        title: `Node ${markers.length + 1}`
+      }).addTo(map);
+
+      marker.on('dragend', function () {
+        marker.setLatLng(validateCoord(marker.getLatLng()));
+      });
+
+      marker.bindPopup(`Node ${markers.length + 1}`);
+      markers.push(marker);
+    }
+
+    async function calculateRoute() {
+      if (markers.length < 2) {
+        alert('Please add at least 2 nodes');
+        return;
+      }
+
+      try {
+        const coordinates = markers.map(marker => validateCoord(marker.getLatLng()));
+        const route = await getRoute(coordinates);
+
+        routeLayer.clearLayers();
+        L.polyline(route, { color: '#e74c3c', weight: 5 }).addTo(routeLayer);
+        map.fitBounds(routeLayer.getBounds());
+
+      } catch (error) {
+        console.error('Routing error:', error);
+        alert('Error calculating route: ' + error.message);
+      }
+    }
+
+    async function getRoute(coordinates) {
+      const osrmUrl = 'https://router.project-osrm.org/route/v1/driving/';
+      const locs = coordinates.map(coord =>
+        `${coord.lng},${coord.lat}`
+      ).join(';');
+
+      const response = await fetch(`${osrmUrl}${locs}?overview=full&geometries=geojson`);
+      const data = await response.json();
+
+      if (data.code !== 'Ok') throw new Error(data.message);
+      return data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+    }
+
+    function clearAll() {
+      markers.forEach(marker => map.removeLayer(marker));
+      markers = [];
+      routeLayer.clearLayers();
+    }
+
+    // Initialize map when page loads
+    initMap();
+  </script>
+</body>
+
+</html>
