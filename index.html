@@ -21,6 +21,7 @@
       height: 600px;
       border: 2px solid #3498db;
       border-radius: 8px;
+      margin-bottom: 20px;
     }
 
     .controls {
@@ -32,6 +33,20 @@
       padding: 15px;
       border-radius: 8px;
       box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    }
+
+    #route-info {
+      padding: 15px;
+      background: #ecf0f1;
+      border-radius: 5px;
+      margin-top: 10px;
+      text-align: center;
+      font-size: 1.2em;
+    }
+
+    #distance-value {
+      color: #27ae60;
+      font-weight: bold;
     }
 
     button {
@@ -63,23 +78,24 @@
     <button onclick="clearAll()">Clear All Markers</button>
   </div>
   <div id="map"></div>
+  <div id="route-info">
+    <p>Total Route Distance: <span id="distance-value">0</span> km</p>
+  </div>
 
   <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
   <script>
     let map;
     let markers = [];
     let routeLayer = L.featureGroup();
-    const AHMEDABAD_COORD = [23.0225, 72.5714]; // Latitude, Longitude for Ahmedabad
+    const AHMEDABAD_COORD = [23.0225, 72.5714];
 
     function initMap() {
-      // Initialize map centered on Ahmedabad
       map = L.map('map').setView(AHMEDABAD_COORD, 13);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors'
       }).addTo(map);
       map.addLayer(routeLayer);
 
-      // Add click handler for placing markers
       map.on('click', function (e) {
         addMarker(e.latlng);
       });
@@ -121,15 +137,20 @@
 
       try {
         const coordinates = markers.map(marker => validateCoord(marker.getLatLng()));
-        const route = await getRoute(coordinates);
+        const routeData = await getRoute(coordinates);
 
         routeLayer.clearLayers();
-        L.polyline(route, { color: '#e74c3c', weight: 5 }).addTo(routeLayer);
+        L.polyline(routeData.coordinates, { color: '#e74c3c', weight: 5 }).addTo(routeLayer);
         map.fitBounds(routeLayer.getBounds());
+
+        // Update distance display
+        const distanceKm = (routeData.distance / 1000).toFixed(2);
+        document.getElementById('distance-value').textContent = distanceKm;
 
       } catch (error) {
         console.error('Routing error:', error);
         alert('Error calculating route: ' + error.message);
+        document.getElementById('distance-value').textContent = '0';
       }
     }
 
@@ -143,13 +164,18 @@
       const data = await response.json();
 
       if (data.code !== 'Ok') throw new Error(data.message);
-      return data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+
+      return {
+        coordinates: data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]),
+        distance: data.routes[0].distance
+      };
     }
 
     function clearAll() {
       markers.forEach(marker => map.removeLayer(marker));
       markers = [];
       routeLayer.clearLayers();
+      document.getElementById('distance-value').textContent = '0';
     }
 
     // Initialize map when page loads
